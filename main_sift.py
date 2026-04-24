@@ -61,6 +61,11 @@ class SiftMapTrackerApp:
         # --- 2. 状态记忆初始化 (惯性导航兜底) ---
         self.last_x = None
         self.last_y = None
+        self.smoothed_x = None
+        self.smoothed_y = None
+        self.relocate_x = None
+        self.relocate_y = None
+        self.relocate_hits = 0
         self.lost_frames = 0
         # --- 使用配置文件中的最大丢失帧数 ---
         self.MAX_LOST_FRAMES = config.MAX_LOST_FRAMES
@@ -154,6 +159,17 @@ class SiftMapTrackerApp:
                 # --- 使用配置文件中的 RANSAC 误差阈值 ---
                 M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, config.SIFT_RANSAC_THRESHOLD)
 
+                if M is not None and mask is not None:
+                    inlier_count = int(mask.ravel().sum())
+                    inlier_ratio = inlier_count / max(1, len(good_matches))
+                    has_stable_match = (
+                            inlier_count >= config.SIFT_MIN_INLIER_COUNT and
+                            inlier_ratio >= config.SIFT_MIN_INLIER_RATIO
+                    )
+
+                    if not has_stable_match:
+                        M = None
+
                 if M is not None:
                     h, w = minimap_gray.shape
                     center_pt = np.float32([[[w / 2, h / 2]]])
@@ -164,13 +180,40 @@ class SiftMapTrackerApp:
                     temp_y = int(dst_center[0][0][1])
 
                     if 0 <= temp_x < self.map_width and 0 <= temp_y < self.map_height:
+                        if self.smoothed_x is not None:
+                            jump_distance = np.sqrt((temp_x - self.smoothed_x) ** 2 + (temp_y - self.smoothed_y) ** 2)
+                            if jump_distance > config.SIFT_MAX_JUMP_DISTANCE:
+                                if self._should_accept_relocation(temp_x, temp_y):
+                                    self.smoothed_x = float(temp_x)
+                                    self.smoothed_y = float(temp_y)
+                                    self.relocate_x = None
+                                    self.relocate_y = None
+                                    self.relocate_hits = 0
+                                else:
+                                    temp_x, temp_y = None, None
+                    else:
+                        temp_x, temp_y = None, None
+
+                    if temp_x is not None and temp_y is not None:
                         found = True
-                        center_x = temp_x
-                        center_y = temp_y
+
+                        if self.smoothed_x is None:
+                            self.smoothed_x = float(temp_x)
+                            self.smoothed_y = float(temp_y)
+                        else:
+                            alpha = config.SIFT_SMOOTH_ALPHA
+                            self.smoothed_x = alpha * temp_x + (1 - alpha) * self.smoothed_x
+                            self.smoothed_y = alpha * temp_y + (1 - alpha) * self.smoothed_y
+
+                        center_x = int(self.smoothed_x)
+                        center_y = int(self.smoothed_y)
 
                         self.last_x = center_x
                         self.last_y = center_y
                         self.lost_frames = 0
+                        self.relocate_x = None
+                        self.relocate_y = None
+                        self.relocate_hits = 0
 
         # --- 惯性兜底 ---
         if not found and self.last_x is not None:
@@ -230,6 +273,28 @@ class SiftMapTrackerApp:
 
         # --- 使用配置文件中的刷新频率 ---
         self.root.after(config.SIFT_REFRESH_RATE, self.update_tracker)
+
+    def _should_accept_relocation(self, x, y):
+        if self.lost_frames >= config.SIFT_RELOCATE_AFTER_LOST:
+            return True
+
+        if self.relocate_x is None:
+            self.relocate_x = x
+            self.relocate_y = y
+            self.relocate_hits = 1
+            return False
+
+        candidate_distance = np.sqrt((x - self.relocate_x) ** 2 + (y - self.relocate_y) ** 2)
+        if candidate_distance <= config.SIFT_RELOCATE_DISTANCE:
+            self.relocate_x = x
+            self.relocate_y = y
+            self.relocate_hits += 1
+        else:
+            self.relocate_x = x
+            self.relocate_y = y
+            self.relocate_hits = 1
+
+        return self.relocate_hits >= config.SIFT_RELOCATE_CONFIRM_FRAMES
 
 
 if __name__ == "__main__":

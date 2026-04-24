@@ -16,6 +16,8 @@ Y_MIN = -11
 Y_MAX = 11
 
 TILE_SIZE = 256  # 瓦片图标准尺寸
+REQUEST_TIMEOUT = 5
+REQUEST_DELAY = 0.02
 
 
 # ================================================
@@ -44,10 +46,10 @@ def download_and_stitch():
         for y in range(Y_MIN, Y_MAX + 1):
             current_tile += 1
             url = BASE_URL.format(x=x, y=y)
-            print(f"进度 {current_tile}/{total_tiles} | 正在下载瓦片: X={x}, Y={y} ...")
+            print(f"进度 {current_tile}/{total_tiles} | 正在下载瓦片: X={x}, Y={y} ...", flush=True)
 
             try:
-                response = session.get(url, headers=headers, timeout=10)
+                response = session.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
 
                 if response.status_code == 200:
                     # 将下载的二进制数据转为图片对象
@@ -62,13 +64,12 @@ def download_and_stitch():
                     result_image.paste(tile, (paste_x, paste_y))
                 else:
                     # 没画图的虚空边界报 404 是正常的，跳过即可
-                    print(f"  [跳过] X={x}, Y={y} 处为空白区域 (状态码: {response.status_code})")
+                    print(f"  [跳过] X={x}, Y={y} 处为空白区域 (状态码: {response.status_code})", flush=True)
 
-                # 延时 0.1 秒，避免请求过快被服务器拉黑
-                time.sleep(0.1)
+                time.sleep(REQUEST_DELAY)
 
             except Exception as e:
-                print(f"  [错误] 下载 X={x}, Y={y} 失败: {e}")
+                print(f"  [错误] 下载 X={x}, Y={y} 失败: {e}", flush=True)
 
     # 4. 导出成品
     print("\n✅ 下载与拼接完成！正在保存...")

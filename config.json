@@ -1,9 +1,9 @@
 {
     "MINIMAP": {
-        "top": 309,
-        "left": 1837,
-        "width": 180,
-        "height": 180
+        "top": 49,
+        "left": -318,
+        "width": 220,
+        "height": 220
     },
     "WINDOW_GEOMETRY": "700x350+1500+100",
     "VIEW_SIZE": 400,
@@ -12,9 +12,16 @@
     "MAX_LOST_FRAMES": 50,
     "SIFT_REFRESH_RATE": 50,
     "SIFT_CLAHE_LIMIT": 3.0,
-    "SIFT_MATCH_RATIO": 0.9,
-    "SIFT_MIN_MATCH_COUNT": 5,
-    "SIFT_RANSAC_THRESHOLD": 8.0,
+    "SIFT_MATCH_RATIO": 0.75,
+    "SIFT_MIN_MATCH_COUNT": 10,
+    "SIFT_RANSAC_THRESHOLD": 5.0,
+    "SIFT_MIN_INLIER_COUNT": 8,
+    "SIFT_MIN_INLIER_RATIO": 0.45,
+    "SIFT_MAX_JUMP_DISTANCE": 450,
+    "SIFT_SMOOTH_ALPHA": 0.35,
+    "SIFT_RELOCATE_CONFIRM_FRAMES": 2,
+    "SIFT_RELOCATE_DISTANCE": 120,
+    "SIFT_RELOCATE_AFTER_LOST": 10,
     "AI_REFRESH_RATE": 50,
     "AI_CONFIDENCE_THRESHOLD": 0.55,
     "AI_MIN_MATCH_COUNT": 9,
