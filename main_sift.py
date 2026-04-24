@@ -16,7 +16,17 @@ def run_selector_if_needed(force=False):
     """
     # 检查 config.json 中是否已经有了合法的坐标
     minimap_cfg = config.settings.get("MINIMAP", {})
-    has_valid_config = minimap_cfg and "top" in minimap_cfg and "left" in minimap_cfg
+    has_valid_config = (
+            minimap_cfg and
+            "top" in minimap_cfg and
+            "left" in minimap_cfg and
+            "width" in minimap_cfg and
+            "height" in minimap_cfg and
+            minimap_cfg.get("top", -1) >= 0 and
+            minimap_cfg.get("left", -1) >= 0 and
+            minimap_cfg.get("width", 0) > 0 and
+            minimap_cfg.get("height", 0) > 0
+    )
 
     if not has_valid_config or force:
         print("未检测到有效的小地图坐标，或请求重新校准。")
@@ -63,6 +73,8 @@ class SiftMapTrackerApp:
         self.last_y = None
         self.smoothed_x = None
         self.smoothed_y = None
+        self.prev_smoothed_x = None
+        self.prev_smoothed_y = None
         self.relocate_x = None
         self.relocate_y = None
         self.relocate_hits = 0
@@ -186,6 +198,8 @@ class SiftMapTrackerApp:
                                 if self._should_accept_relocation(temp_x, temp_y):
                                     self.smoothed_x = float(temp_x)
                                     self.smoothed_y = float(temp_y)
+                                    self.prev_smoothed_x = self.smoothed_x
+                                    self.prev_smoothed_y = self.smoothed_y
                                     self.relocate_x = None
                                     self.relocate_y = None
                                     self.relocate_hits = 0
@@ -200,13 +214,17 @@ class SiftMapTrackerApp:
                         if self.smoothed_x is None:
                             self.smoothed_x = float(temp_x)
                             self.smoothed_y = float(temp_y)
+                            self.prev_smoothed_x = self.smoothed_x
+                            self.prev_smoothed_y = self.smoothed_y
                         else:
-                            alpha = config.SIFT_SMOOTH_ALPHA
+                            match_distance = np.sqrt((temp_x - self.smoothed_x) ** 2 + (temp_y - self.smoothed_y) ** 2)
+                            alpha = self._get_smooth_alpha(match_distance)
+                            self.prev_smoothed_x = self.smoothed_x
+                            self.prev_smoothed_y = self.smoothed_y
                             self.smoothed_x = alpha * temp_x + (1 - alpha) * self.smoothed_x
                             self.smoothed_y = alpha * temp_y + (1 - alpha) * self.smoothed_y
 
-                        center_x = int(self.smoothed_x)
-                        center_y = int(self.smoothed_y)
+                        center_x, center_y = self._get_display_position()
 
                         self.last_x = center_x
                         self.last_y = center_y
@@ -295,6 +313,32 @@ class SiftMapTrackerApp:
             self.relocate_hits = 1
 
         return self.relocate_hits >= config.SIFT_RELOCATE_CONFIRM_FRAMES
+
+    def _get_smooth_alpha(self, distance):
+        if distance < config.SIFT_SMOOTH_SMALL_MOVE:
+            return config.SIFT_SMOOTH_SMALL_ALPHA
+        if distance > config.SIFT_SMOOTH_FAST_MOVE:
+            return config.SIFT_SMOOTH_FAST_ALPHA
+        return config.SIFT_SMOOTH_ALPHA
+
+    def _get_display_position(self):
+        if self.prev_smoothed_x is None or self.prev_smoothed_y is None:
+            return int(self.smoothed_x), int(self.smoothed_y)
+
+        vx = self.smoothed_x - self.prev_smoothed_x
+        vy = self.smoothed_y - self.prev_smoothed_y
+        speed = np.sqrt(vx ** 2 + vy ** 2)
+        if speed <= 0:
+            return int(self.smoothed_x), int(self.smoothed_y)
+
+        predict_distance = min(speed * config.SIFT_PREDICT_FACTOR, config.SIFT_PREDICT_MAX_DISTANCE)
+        scale = predict_distance / speed
+        display_x = self.smoothed_x + vx * scale
+        display_y = self.smoothed_y + vy * scale
+
+        display_x = min(max(display_x, 0), self.map_width - 1)
+        display_y = min(max(display_y, 0), self.map_height - 1)
+        return int(display_x), int(display_y)
 
 
 if __name__ == "__main__":
